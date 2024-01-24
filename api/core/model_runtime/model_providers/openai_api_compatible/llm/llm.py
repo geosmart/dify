@@ -224,7 +224,7 @@ class OAIAPICompatLargeLanguageModel(_CommonOAI_API_Compat, LargeLanguageModel):
             entity.model_properties[ModelPropertyKey.MODE] = LLMMode.COMPLETION.value
         else:
             raise ValueError(f"Unknown completion type {credentials['completion_type']}")
-    
+
         return entity
 
     # validate_credentials method has been rewritten to use the requests library for compatibility with all providers following OpenAI's API standard.
@@ -343,15 +343,21 @@ class OAIAPICompatLargeLanguageModel(_CommonOAI_API_Compat, LargeLanguageModel):
                 )
             )
 
-        for chunk in response.iter_lines(decode_unicode=True, delimiter='\n\n'):
+        if "rwkv" in model.lower():
+            delimiter = '\r\n'
+        else:
+            delimiter = '\n\n'
+
+        for chunk in response.iter_lines(decode_unicode=True, delimiter=delimiter):
             if chunk:
                 decoded_chunk = chunk.strip().lstrip('data: ').lstrip()
-
                 chunk_json = None
                 try:
                     chunk_json = json.loads(decoded_chunk)
                 # stream ended
                 except json.JSONDecodeError as e:
+                    if "rwkv" in model.lower() and decoded_chunk == '[DONE]':
+                        break
                     yield create_final_llm_result_chunk(
                         index=chunk_index + 1,
                         message=AssistantPromptMessage(content=""),
